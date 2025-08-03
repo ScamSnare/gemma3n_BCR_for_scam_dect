@@ -1,3 +1,7 @@
+# ⚠️ Fork Notice
+
+This repository is a fork of [chenxiaolong/BCR](https://github.com/chenxiaolong/BCR), created for a competition. Additional functionality will be added and disclosed in future updates.
+
 # Basic Call Recorder
 
 <img src="app/images/icon.svg" alt="app icon" width="72" />
