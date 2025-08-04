@@ -39,29 +39,33 @@ class ModelManager(private val context: Context) {
         // Load the model from path and set options
         Log.d(TAG, "Loading model from path: $modelPath")
         val optionsBuilder = LlmInference.LlmInferenceOptions.builder()
-        .setModelPath(modelPath)
-        .setMaxTokens(100)
-        .setPreferredBackend(preferredBackend)
-        .setMaxNumImages(0)
+            .setModelPath(modelPath)
+            .setMaxTokens(1024)
+            .setPreferredBackend(preferredBackend)
+            .setMaxNumImages(0)
+        val options = optionsBuilder.build()
+
 
         // Create an instance of the LLM Inference task
-        llmInference = LlmInference.createFromOptions(context, optionsBuilder.build())
-    }
+        val llmInference = LlmInference.createFromOptions(context, options)
 
+        val session =LlmInferenceSession.createFromOptions(
+            llmInference,
+            LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                .setTopK(10)
+                .setTopP(0.9f)
+                .setTemperature(0.1f)
+                .setGraphOptions(
+                GraphOptions.builder()
+                    .setEnableVisionModality(false)
+                    .build()
+                )
+                .build(),
+        )
 
-    fun runInference(prompt: String): String? {
+        session.addQueryChunk("Hello, Gemma!")
 
-        // Check if a valid session exists
-        if (session == null) {
-            Log.e(TAG, "No valid session available for inference.")
-            return null
-        }
-
-        if (prompt.trim().isNotEmpty()) {
-            session.addQueryChunk(prompt)
-        }
-
-        return session.generateResponse()
-    }
-    
+        val res = session.generateResponse()
+        Log.d(TAG, "Inference result: $res")
+    }    
 }

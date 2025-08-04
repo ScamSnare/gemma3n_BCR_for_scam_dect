@@ -14,6 +14,9 @@ kotlin = "2.2.0"
 kotlinx-serialization = "1.9.0"
 kudzu = "6.0.0"
 material = "1.12.0"
+mediapipeTasksText = "0.10.21"
+mediapipeTasksGenai = "0.10.25"
+mediapipeTasksImageGenerator = "0.10.21"
 
 [libraries]
 androidx-activity = { group = "androidx.activity", name = "activity-ktx", version.ref = "androidx-activity" }
@@ -27,6 +30,9 @@ androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview"
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kudzu = { group = "io.github.copper-leaf", name = "kudzu-core", version.ref = "kudzu" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediapipeTasksText" }
+mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeTasksGenai" }
+mediapipe-tasks-imagegen = { group = "com.google.mediapipe", name = "tasks-vision-image-generator", version.ref = "mediapipeTasksImageGenerator" }
 
 # Test
 junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }

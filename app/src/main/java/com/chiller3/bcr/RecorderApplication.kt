@@ -63,8 +63,8 @@ class RecorderApplication : Application() {
         }
 
         // // Initialize ModelManager
-        // val modelManager = ModelManager(this)
-        // modelManager.loadModel()
+        val modelManager = ModelManager(this)
+        modelManager.loadModel()
 
         // Log.d(TAG, "Starting inference with the loaded model.")
         // val res = modelManager.runInference("Hello, Gemma!")

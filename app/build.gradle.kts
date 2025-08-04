@@ -224,8 +224,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kudzu)
     implementation(libs.material)
-    implementation("com.google.mediapipe:tasks-genai:latest.release")
-    implementation("com.google.mediapipe:tasks-audio:latest.release")
+    implementation(libs.mediapipe.tasks.text)
+    implementation(libs.mediapipe.tasks.genai)
+    implementation(libs.mediapipe.tasks.imagegen)
     testImplementation(libs.junit)
 }
 
