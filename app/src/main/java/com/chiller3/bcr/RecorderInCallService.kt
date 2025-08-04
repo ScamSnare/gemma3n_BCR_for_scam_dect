@@ -18,7 +18,8 @@ import androidx.annotation.StringRes
 import com.chiller3.bcr.output.OutputFile
 import kotlin.random.Random
 
-class RecorderInCallService : InCallService(), RecorderThread.OnRecordingCompletedListener {
+class RecorderInCallService : InCallService(), RecorderThread.OnRecordingCompletedListener,
+    SpeechRecognitionThread.OnTranscriptionCompletedListener {
     companion object {
         private val TAG = RecorderInCallService::class.java.simpleName
 
@@ -489,13 +490,35 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
         additionalFiles: List<OutputFile>,
         status: RecorderThread.Status,
     ) {
-        Log.i(TAG, "Recording completed: ${thread.id}: ${file?.redacted}: $status")
+        // Check if this is a chunk (periodic save) or final recording
+        val isChunk = file?.uri?.toString()?.contains("-part") == true
+        
+        if (isChunk) {
+            Log.i(TAG, "Recording chunk completed: ${thread.id}: [AUDIO_CHUNK]: $status")
+        } else {
+            Log.i(TAG, "Recording completed: ${thread.id}: ${file?.redacted}: $status")
+        }
+        
         handler.post {
-            onRecorderExited(thread)
+            // Only remove from tracking for final recording completion, not chunks
+            if (!isChunk) {
+                onRecorderExited(thread)
+            }
 
             when (status) {
                 RecorderThread.Status.Succeeded -> {
-                    notifications.notifyRecordingSuccess(file!!, additionalFiles)
+                    if (!isChunk) {
+                        // Only show notification for final recording
+                        notifications.notifyRecordingSuccess(file!!, additionalFiles)
+                        
+                        // Only start speech recognition for final complete recording
+                        // Chunks are incomplete WAV files and cannot be processed
+                        if (file != null && shouldPerformSpeechRecognition()) {
+                            startSpeechRecognition(file)
+                        }
+                    } else {
+                        Log.d(TAG, "Skipping speech recognition for chunk (incomplete WAV file)")
+                    }
                 }
                 is RecorderThread.Status.Failed -> {
                     val message = buildString {
@@ -528,6 +551,88 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
                     }
                 }
                 RecorderThread.Status.Cancelled -> {}
+            }
+        }
+    }
+    
+    /**
+     * Check if speech recognition should be performed.
+     * This could be controlled by user preferences in the future.
+     */
+    private fun shouldPerformSpeechRecognition(): Boolean {
+        // For now, always perform speech recognition
+        // In the future, this could be controlled by user preferences
+        return true
+    }
+    
+    /**
+     * Start speech recognition for the given audio file.
+     */
+    private fun startSpeechRecognition(audioFile: OutputFile) {
+        Log.i(TAG, "Starting speech recognition for: ${audioFile.redacted}")
+        
+        try {
+            // Check if native whisper library is available
+            if (SpeechRecognitionThread.isLibraryAvailable(this)) {
+                Log.d(TAG, "Using full whisper.cpp implementation")
+                val speechRecognitionThread = SpeechRecognitionThread(
+                    context = this,
+                    audioFile = audioFile,
+                    listener = this
+                )
+                speechRecognitionThread.start()
+            } else {
+                Log.w(TAG, "Whisper native library not available - likely due to system app limitations")
+                Log.w(TAG, "Using fallback test implementation instead")
+                val testThread = SpeechRecognitionTestThread(
+                    context = this,
+                    audioFile = audioFile,
+                    listener = object : SpeechRecognitionTestThread.OnTranscriptionCompletedListener {
+                        override fun onTranscriptionCompleted(result: SpeechRecognitionTestThread.TranscriptionResult) {
+                            Log.d(TAG, "Test transcription completed with result: $result")
+                            // Convert test result to main result type
+                            val mainResult = when (result) {
+                                is SpeechRecognitionTestThread.TranscriptionResult.Success -> {
+                                    Log.d(TAG, "Converting success result: ${result.text}")
+                                    SpeechRecognitionThread.TranscriptionResult.Success("[SYSTEM_APP_FALLBACK] ${result.text}")
+                                }
+                                is SpeechRecognitionTestThread.TranscriptionResult.Error -> {
+                                    Log.d(TAG, "Converting error result: ${result.message}")
+                                    SpeechRecognitionThread.TranscriptionResult.Error(result.message, result.exception)
+                                }
+                            }
+                            Log.d(TAG, "Calling main onTranscriptionCompleted with: $mainResult")
+                            onTranscriptionCompleted(mainResult)
+                        }
+                    }
+                )
+                testThread.start()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start speech recognition", e)
+        }
+    }
+    
+    /**
+     * Handle completion of speech-to-text transcription.
+     */
+    override fun onTranscriptionCompleted(result: SpeechRecognitionThread.TranscriptionResult) {
+        Log.d(TAG, "Main onTranscriptionCompleted called with result: $result")
+        when (result) {
+            is SpeechRecognitionThread.TranscriptionResult.Success -> {
+                Log.i(TAG, "=== CALL TRANSCRIPTION ===")
+                Log.i(TAG, "Transcribed text: ${result.text}")
+                Log.i(TAG, "========================")
+                
+                // Here you could save the transcription to a file, 
+                // send it to a server, or display it in a notification
+                // For now, we just log it to the console as requested
+            }
+            is SpeechRecognitionThread.TranscriptionResult.Error -> {
+                Log.e(TAG, "Speech recognition failed: ${result.message}")
+                if (result.exception != null) {
+                    Log.e(TAG, "Speech recognition exception", result.exception)
+                }
             }
         }
     }
