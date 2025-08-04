@@ -9,7 +9,7 @@ This repository is a fork of [chenxiaolong/BCR](https://github.com/chenxiaolong/
 
 # Basic Call Recorder
 
-<img src="app/images/icon.svg" alt="app icon" width="72" />
+<img src="app/images/old_icon.svg" alt="app icon" width="72" />
 
 [![latest release badge](https://img.shields.io/github/v/release/chenxiaolong/BCR?sort=semver)](https://github.com/chenxiaolong/BCR/releases/latest)
 [![license badge](https://img.shields.io/github/license/chenxiaolong/BCR)](./LICENSE)
