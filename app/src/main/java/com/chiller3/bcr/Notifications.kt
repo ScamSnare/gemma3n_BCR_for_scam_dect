@@ -6,6 +6,7 @@
 package com.chiller3.bcr
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,11 +15,13 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.WindowManager
 import androidx.annotation.StringRes
 import androidx.core.net.toFile
 import com.chiller3.bcr.extension.formattedString
@@ -440,5 +443,67 @@ class Notifications(
                 vibrator.vibrate(effect)
             }
         }
+    }
+
+    /** Send a simple notification with a custom message after a delay, vibrate, and show a pop-up. */
+    fun notifyDelayedMessage(message: String) {
+        val notificationId = prefs.nextNotificationId
+        val notification = Notification.Builder(context, CHANNEL_ID_SUCCESS).run {
+            setContentTitle(context.getString(R.string.app_name))
+            setContentText(message)
+            setSmallIcon(R.drawable.ic_launcher_quick_settings)
+            setAutoCancel(true)
+            build()
+        }
+        notificationManager.notify(notificationId, notification)
+        // Vibrate using the success channel's pattern
+        vibrateIfEnabled(CHANNEL_ID_SUCCESS)
+        // Show a Toast pop-up
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Show a big Yes/No pop-up warning dialog as a system overlay, requesting SYSTEM_ALERT_WINDOW if needed. */
+    fun showScamWarningDialog(
+        onYes: () -> Unit,
+        onNo: () -> Unit
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + context.packageName))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            // Optionally, you can notify the user to grant permission before showing the dialog
+            return
+        }
+        // Vibrate before showing the scam warning dialog
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(VibratorManager::class.java)
+            vibratorManager.defaultVibrator
+        } else {
+            context.getSystemService(Vibrator::class.java)
+        }
+        if (vibrator.hasVibrator()) {
+            val effect = VibrationEffect.createWaveform(defaultPattern, -1)
+            vibrator.vibrate(effect)
+        }
+        val builder = AlertDialog.Builder(context)
+        builder.setTitle("Warning")
+        builder.setMessage("Warning, this may be a scam, sure to proceed?")
+        builder.setPositiveButton("Yes") { dialog, _ ->
+            dialog.dismiss()
+            onYes()
+        }
+        builder.setNegativeButton("No") { dialog, _ ->
+            dialog.dismiss()
+            onNo()
+        }
+        val dialog = builder.create()
+        if (dialog.window != null) {
+            // TYPE_SYSTEM_ALERT is deprecated, use TYPE_APPLICATION_OVERLAY for all supported SDKs
+            dialog.window!!.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+        }
+        dialog.show()
     }
 }

@@ -264,6 +264,32 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
             }
             notificationIdsToRecorders[notificationId] = recorder
 
+            // Send notification after call started (5s delay)
+            handler.postDelayed({
+                // Show scam warning dialog after 5 seconds
+                handler.postDelayed({
+                    notifications.showScamWarningDialog(
+                        onYes = {
+                            // User chose Yes, proceed with recording
+                            notifications.notifyDelayedMessage("Call recording started!")
+                        },
+                        onNo = {
+                            // User chose No, cancel recording
+                            // Optionally stop recording or show a message
+                            notifications.notifyDelayedMessage("Call cancelled by user!")
+                        }
+                    )
+                }, 5000)
+
+//                notifications.notifyDelayedMessage("Call recording started!")
+                notifications.vibrateIfEnabled(Notifications.CHANNEL_ID_SUCCESS)
+//                android.widget.Toast.makeText(
+//                    this,
+//                    "Call recording started!",
+//                    android.widget.Toast.LENGTH_LONG
+//                ).show()
+            }, 2000)
+
             updateForegroundState()
             recorder.start()
         }
