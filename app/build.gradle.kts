@@ -208,6 +208,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kudzu)
     implementation(libs.material)
+    implementation("com.google.mediapipe:tasks-genai:latest.release")
+    implementation("com.google.mediapipe:tasks-audio:latest.release")
     testImplementation(libs.junit)
 }
 
