@@ -2,6 +2,11 @@
 
 This repository is a fork of [chenxiaolong/BCR](https://github.com/chenxiaolong/BCR), created for a competition. Additional functionality will be added and disclosed in future updates.
 
+<p align="center">
+  <img src="app/images/icon.svg" alt="High-res app icon" width="200" />
+</p>
+
+
 # Basic Call Recorder
 
 <img src="app/images/icon.svg" alt="app icon" width="72" />
