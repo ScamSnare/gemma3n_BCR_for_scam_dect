@@ -10,6 +10,8 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.telecom.Call
@@ -235,6 +237,57 @@ class RecorderThread(
         listener.onRecordingStateChanged(this)
     }
 
+    // Timer for periodic saving
+    private var periodicSaveHandler: Handler? = null
+    private var periodicSaveRunnable: Runnable? = null
+    private val periodicSaveIntervalMs = 3000L // 3 seconds, can be changed later
+    private var periodicSaveIndex = 0
+
+    private fun startPeriodicSave(outputDocFile: DocumentFile) {
+        Log.i(tag, "Starting periodic save for: ${outputDocFile.uri}")
+        periodicSaveHandler = Handler(Looper.getMainLooper())
+        periodicSaveRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    Log.i(tag, "Periodic save triggered for: ${outputDocFile.uri}")
+                    val periodicFileName = outputDocFile.name?.let { name ->
+                        val baseName = name.substringBeforeLast('.')
+                        val ext = name.substringAfterLast('.', "tmp")
+                        "$baseName-part${periodicSaveIndex++}.$ext"
+                    } ?: "recording-part${periodicSaveIndex++}.tmp"
+                    Log.i(tag, "Periodic file name: $periodicFileName")
+                    val periodicFile = dirUtils.createFileInDefaultDir(
+                        outputPath.value.dropLast(1) + listOf(periodicFileName),
+                        format.mimeTypeContainer
+                    )
+                    Log.i(tag, "Periodic file created: ${periodicFile.uri}")
+                    val inputStream = context.contentResolver.openInputStream(outputDocFile.uri)
+                    val outputStream = context.contentResolver.openOutputStream(periodicFile.uri)
+                    if (inputStream != null && outputStream != null) {
+                        Log.i(tag, "Copying data from ${outputDocFile.uri} to ${periodicFile.uri}")
+                        inputStream.copyTo(outputStream)
+                        inputStream.close()
+                        outputStream.close()
+                        Log.i(tag, "Periodic save successful: ${periodicFile.uri}")
+                    } else {
+                        Log.w(tag, "Input or output stream is null. inputStream: $inputStream, outputStream: $outputStream")
+                    }
+                } catch (e: Exception) {
+                    Log.e(tag, "Failed to save periodic recording part", e)
+                }
+                periodicSaveHandler?.postDelayed(this, periodicSaveIntervalMs)
+            }
+        }
+        periodicSaveHandler?.postDelayed(periodicSaveRunnable!!, periodicSaveIntervalMs)
+    }
+
+    private fun stopPeriodicSave() {
+        periodicSaveHandler?.removeCallbacks(periodicSaveRunnable!!)
+        periodicSaveHandler = null
+        periodicSaveRunnable = null
+        periodicSaveIndex = 0
+    }
+
     override fun run() {
         wallBeginNanos = System.nanoTime()
 
@@ -261,6 +314,9 @@ class RecorderThread(
 
                 var recordingInfo: RecordingInfo? = null
 
+                // Start periodic save
+                startPeriodicSave(outputDocFile)
+
                 try {
                     dirUtils.openFile(outputDocFile, true).use {
                         recordingInfo = recordUntilCancelled(it)
@@ -269,6 +325,9 @@ class RecorderThread(
 
                     status = Status.Succeeded
                 } finally {
+                    // Stop periodic save
+                    stopPeriodicSave()
+
                     state = State.FINALIZING
                     listener.onRecordingStateChanged(this)
 
@@ -557,8 +616,6 @@ class RecorderThread(
             sampleRate.toInt(),
             CHANNEL_CONFIG,
             ENCODING,
-            // On some devices, MediaCodec occasionally has sudden spikes in processing time, so use
-            // a larger internal buffer to reduce the chance of overrun on the recording side.
             minBufSize * 6,
         )
         val initialBufSize = audioRecord.bufferSizeInFrames *
@@ -567,7 +624,6 @@ class RecorderThread(
 
         Log.d(tag, "AudioRecord format: ${audioRecord.format}")
 
-        // Where's my RAII? :(
         try {
             audioRecord.startRecording()
 
@@ -575,7 +631,6 @@ class RecorderThread(
                 val container = format.getContainer(pfd.fileDescriptor)
 
                 try {
-                    // audioRecord.format has the detected native sample rate
                     val mediaFormat = format.getMediaFormat(audioRecord.format, formatParam)
                     val encoder = format.getEncoder(mediaFormat, container)
 
@@ -609,10 +664,6 @@ class RecorderThread(
      * file. If [audioRecord] fails to capture data, the loop will behave as if [cancel] was called
      * (ie. abort, but ensuring that the output file is valid).
      *
-     * The approximate amount of time to cancel reading from the audio source is the time it takes
-     * to process the minimum buffer size. Additionally, additional time is needed to write out the
-     * remaining encoded data to the output file.
-     *
      * @param audioRecord [AudioRecord.startRecording] must have been called
      * @param encoder [Encoder.start] must have been called
      * @param bufSize Minimum buffer size for each [AudioRecord.read] operation
@@ -644,9 +695,6 @@ class RecorderThread(
 
         while (!isCancelled) {
             val begin = System.nanoTime()
-            // We do a non-blocking read because on Samsung devices, when the call ends, the audio
-            // device immediately stops producing data and blocks forever until the next call is
-            // active.
             val n = audioRecord.read(buffer, buffer.remaining(), AudioRecord.READ_NON_BLOCKING)
             val recordElapsed = System.nanoTime() - begin
             var encodeElapsed = 0L
@@ -656,7 +704,6 @@ class RecorderThread(
                 isCancelled = true
                 wasReadSamplesError = true
             } else if (n == 0) {
-                // Wait for the wall clock equivalent of the minimum buffer size
                 sleep(bufferNs / 1_000_000L / factor)
                 continue
             } else {
@@ -673,7 +720,6 @@ class RecorderThread(
 
                 val encodeBegin = System.nanoTime()
 
-                // If paused by the user or holding, keep recording, but throw away the data
                 if (!isPaused && !isHolding) {
                     encoder.encode(buffer, false)
                     numFramesEncoded += n / frameSize
@@ -738,18 +784,43 @@ class RecorderThread(
     }
 
     companion object {
-        private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
-        private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
-
+        const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
+        const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         const val MIME_LOGCAT = "text/plain"
         const val MIME_METADATA = "application/json"
-
-        private val JSON_FORMAT = Json {
+        val JSON_FORMAT = Json {
             prettyPrint = true
         }
     }
 
-    private data class RecordingInfo(
+    interface OnRecordingCompletedListener {
+        fun onRecordingStateChanged(thread: RecorderThread)
+        fun onRecordingCompleted(
+            thread: RecorderThread,
+            file: OutputFile?,
+            additionalFiles: List<OutputFile>,
+            status: Status,
+        )
+    }
+
+    sealed interface FailureComponent {
+        data class AndroidMedia(val stackFrame: StackTraceElement) : FailureComponent
+        data object Other : FailureComponent
+    }
+
+    sealed interface DiscardReason {
+        data object Intentional : DiscardReason
+        data class Silence(val callPackage: String) : DiscardReason
+    }
+
+    sealed interface Status {
+        data object Succeeded : Status
+        data class Failed(val component: FailureComponent, val exception: Exception?) : Status
+        data class Discarded(val reason: DiscardReason) : Status
+        data object Cancelled : Status
+    }
+
+    data class RecordingInfo(
         val wallDurationNanos: Long,
         val framesTotal: Long,
         val framesEncoded: Long,
@@ -763,18 +834,6 @@ class RecorderThread(
         val durationSecsWall = wallDurationNanos.toDouble() / 1_000_000_000.0
         val durationSecsTotal = framesTotal.toDouble() / sampleRate / channelCount
         val durationSecsEncoded = framesEncoded.toDouble() / sampleRate / channelCount
-
-        override fun toString() = buildString {
-            append("Wall: ${"%.1f".format(durationSecsWall)}s")
-            append(", Total: $framesTotal frames (${"%.1f".format(durationSecsTotal)}s)")
-            append(", Encoded: $framesEncoded frames (${"%.1f".format(durationSecsEncoded)}s)")
-            append(", Sample rate: $sampleRate")
-            append(", Channel count: $channelCount")
-            append(", Buffer frames: $bufferFrames")
-            append(", Buffer overruns: $bufferOverruns")
-            append(", Was ever paused: $wasEverPaused")
-            append(", Was ever holding: $wasEverHolding")
-        }
     }
 
     private class ReadSamplesException(cause: Throwable? = null)
@@ -782,56 +841,4 @@ class RecorderThread(
 
     private class PureSilenceException(cause: Throwable? = null)
         : Exception("Audio contained pure silence", cause)
-
-    sealed interface FailureComponent {
-        data class AndroidMedia(val stackFrame: StackTraceElement) : FailureComponent
-
-        data object Other : FailureComponent
-    }
-
-    sealed interface DiscardReason {
-        data object Intentional : DiscardReason
-
-        data class Silence(val callPackage: String) : DiscardReason
-    }
-
-    sealed interface Status {
-        data object Succeeded : Status
-
-        data class Failed(val component: FailureComponent, val exception: Exception?) : Status
-
-        data class Discarded(val reason: DiscardReason) : Status
-
-        data object Cancelled : Status
-    }
-
-    interface OnRecordingCompletedListener {
-        /**
-         * Called when the pause state, keep state, or output filename are changed.
-         */
-        fun onRecordingStateChanged(thread: RecorderThread)
-
-        /**
-         * Called when the recording completes, successfully or otherwise. [file] is the output
-         * file.
-         *
-         * [file] may be null in several scenarios:
-         * * The call matched a record rule that defaults to discarding the recording
-         * * The user intentionally chose to discard the recording via the notification
-         * * The output file could not be created
-         * * The thread was cancelled before it started
-         *
-         * Note that for most errors, the output file is *not* deleted.
-         *
-         * [additionalFiles] are additional files associated with the main output file and should be
-         * deleted along with the main file if the user chooses to do so via the notification. These
-         * files may exist even if [file] is null (eg. the log file).
-         */
-        fun onRecordingCompleted(
-            thread: RecorderThread,
-            file: OutputFile?,
-            additionalFiles: List<OutputFile>,
-            status: Status,
-        )
-    }
 }
