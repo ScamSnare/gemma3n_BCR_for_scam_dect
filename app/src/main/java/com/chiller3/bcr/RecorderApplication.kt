@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.net.toFile
 import com.chiller3.bcr.output.OutputDirUtils
 import com.google.android.material.color.DynamicColors
+import ModelManager
 
 class RecorderApplication : Application() {
     override fun onCreate() {
@@ -60,6 +61,15 @@ class RecorderApplication : Application() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         }
+
+        // Initialize ModelManager
+        val modelManager = ModelManager(this)
+        modelManager.loadModel()
+
+        Log.d(TAG, "Starting inference with the loaded model.")
+        val res = modelManager.runInference("Hello, Gemma!")
+        Log.d(TAG, "Inference result: $res")
+
     }
 
     companion object {
