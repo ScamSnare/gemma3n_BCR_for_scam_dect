@@ -1,7 +1,4 @@
-/*
- * SPDX-FileCopyrightText: 2022-2024 Andrew Gunnerson
- * SPDX-License-Identifier: GPL-3.0-only
- */
+
 
 package com.chiller3.bcr
 
@@ -510,14 +507,11 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
                     if (!isChunk) {
                         // Only show notification for final recording
                         notifications.notifyRecordingSuccess(file!!, additionalFiles)
-                        
-                        // Only start speech recognition for final complete recording
-                        // Chunks are incomplete WAV files and cannot be processed
-                        if (file != null && shouldPerformSpeechRecognition()) {
-                            startSpeechRecognition(file)
-                        }
-                    } else {
-                        Log.d(TAG, "Skipping speech recognition for chunk (incomplete WAV file)")
+                    }
+                    
+                    // Start speech recognition for both chunks and final recording
+                    if (file != null && shouldPerformSpeechRecognition()) {
+                        startSpeechRecognition(file)
                     }
                 }
                 is RecorderThread.Status.Failed -> {
@@ -572,42 +566,13 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
         Log.i(TAG, "Starting speech recognition for: ${audioFile.redacted}")
         
         try {
-            // Check if native whisper library is available
-            if (SpeechRecognitionThread.isLibraryAvailable(this)) {
-                Log.d(TAG, "Using full whisper.cpp implementation")
-                val speechRecognitionThread = SpeechRecognitionThread(
-                    context = this,
-                    audioFile = audioFile,
-                    listener = this
-                )
-                speechRecognitionThread.start()
-            } else {
-                Log.w(TAG, "Whisper native library not available - likely due to system app limitations")
-                Log.w(TAG, "Using fallback test implementation instead")
-                val testThread = SpeechRecognitionTestThread(
-                    context = this,
-                    audioFile = audioFile,
-                    listener = object : SpeechRecognitionTestThread.OnTranscriptionCompletedListener {
-                        override fun onTranscriptionCompleted(result: SpeechRecognitionTestThread.TranscriptionResult) {
-                            Log.d(TAG, "Test transcription completed with result: $result")
-                            // Convert test result to main result type
-                            val mainResult = when (result) {
-                                is SpeechRecognitionTestThread.TranscriptionResult.Success -> {
-                                    Log.d(TAG, "Converting success result: ${result.text}")
-                                    SpeechRecognitionThread.TranscriptionResult.Success("[SYSTEM_APP_FALLBACK] ${result.text}")
-                                }
-                                is SpeechRecognitionTestThread.TranscriptionResult.Error -> {
-                                    Log.d(TAG, "Converting error result: ${result.message}")
-                                    SpeechRecognitionThread.TranscriptionResult.Error(result.message, result.exception)
-                                }
-                            }
-                            Log.d(TAG, "Calling main onTranscriptionCompleted with: $mainResult")
-                            onTranscriptionCompleted(mainResult)
-                        }
-                    }
-                )
-                testThread.start()
-            }
+            Log.d(TAG, "Using whisper.cpp speech recognition")
+            val speechRecognitionThread = SpeechRecognitionThread(
+                context = this,
+                audioFile = audioFile,
+                listener = this
+            )
+            speechRecognitionThread.start()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start speech recognition", e)
         }
@@ -617,7 +582,6 @@ class RecorderInCallService : InCallService(), RecorderThread.OnRecordingComplet
      * Handle completion of speech-to-text transcription.
      */
     override fun onTranscriptionCompleted(result: SpeechRecognitionThread.TranscriptionResult) {
-        Log.d(TAG, "Main onTranscriptionCompleted called with result: $result")
         when (result) {
             is SpeechRecognitionThread.TranscriptionResult.Success -> {
                 Log.i(TAG, "=== CALL TRANSCRIPTION ===")

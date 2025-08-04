@@ -62,13 +62,13 @@ class RecorderApplication : Application() {
             startActivity(intent)
         }
 
-        // Initialize ModelManager
-        val modelManager = ModelManager(this)
-        modelManager.loadModel()
+        // // Initialize ModelManager
+        // val modelManager = ModelManager(this)
+        // modelManager.loadModel()
 
-        Log.d(TAG, "Starting inference with the loaded model.")
-        val res = modelManager.runInference("Hello, Gemma!")
-        Log.d(TAG, "Inference result: $res")
+        // Log.d(TAG, "Starting inference with the loaded model.")
+        // val res = modelManager.runInference("Hello, Gemma!")
+        // Log.d(TAG, "Inference result: $res")
 
     }
 

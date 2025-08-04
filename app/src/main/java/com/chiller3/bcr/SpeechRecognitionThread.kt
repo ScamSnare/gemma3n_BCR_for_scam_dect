@@ -484,12 +484,13 @@ class SpeechRecognitionThread(
         val assetManager = context.assets
         
         val modelFiles = arrayOf(
+            "ggml-tiny-q8_0.bin",
             "ggml-base.en.bin",
             "ggml-small.en.bin", 
             "ggml-tiny.en.bin",
             "ggml-base.bin",
             "ggml-small.bin",
-            "ggml-tiny.bin"
+            "ggml-tiny.bin",
         )
         
         for (modelFile in modelFiles) {
