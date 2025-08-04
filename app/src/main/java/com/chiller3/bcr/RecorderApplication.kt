@@ -6,6 +6,9 @@
 package com.chiller3.bcr
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.net.toFile
 import com.chiller3.bcr.output.OutputDirUtils
@@ -49,6 +52,14 @@ class RecorderApplication : Application() {
         // Migrate legacy preferences.
         val prefs = Preferences(this)
         prefs.migrateLegacyRules()
+
+        // Request SYSTEM_ALERT_WINDOW permission at startup if not granted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + packageName))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        }
     }
 
     companion object {
