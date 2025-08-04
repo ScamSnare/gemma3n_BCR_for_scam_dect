@@ -133,6 +133,16 @@ android {
         buildConfigField("String", "PROVIDER_AUTHORITY",
             "APPLICATION_ID + \".provider\"")
         resValue("string", "provider_authority", "$applicationId.provider")
+        
+        ndk {
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                arguments += listOf("-DANDROID_STL=c++_shared")
+            }
+        }
     }
     androidResources {
         generateLocaleConfig = true
@@ -188,6 +198,12 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
     lint {
         // The translations are always going to lag behind new strings being

@@ -240,7 +240,7 @@ class RecorderThread(
     // Timer for periodic saving
     private var periodicSaveHandler: Handler? = null
     private var periodicSaveRunnable: Runnable? = null
-    private val periodicSaveIntervalMs = 3000L // 3 seconds, can be changed later
+    private val periodicSaveIntervalMs = 10000L // 10 seconds for more frequent transcription
     private var periodicSaveIndex = 0
 
     private fun startPeriodicSave(outputDocFile: DocumentFile) {
@@ -269,6 +269,26 @@ class RecorderThread(
                         inputStream.close()
                         outputStream.close()
                         Log.i(tag, "Periodic save successful: ${periodicFile.uri}")
+                        
+                        // NOTE: Skip speech recognition for chunks as they are incomplete WAV files
+                        // Speech recognition will only run on the final complete recording
+                        Log.d(tag, "Skipping speech recognition for incomplete chunk: ${periodicFile.uri}")
+                        
+                        /* Disabled chunk speech recognition - chunks are not valid WAV files
+                        try {
+                            val outputFile = OutputFile(periodicFile.uri, "[AUDIO_CHUNK]", format.mimeTypeContainer)
+                            // Notify listener about the chunk completion for speech recognition
+                            listener.onRecordingCompleted(
+                                this@RecorderThread,
+                                outputFile, 
+                                emptyList(),
+                                Status.Succeeded
+                            )
+                        } catch (e: Exception) {
+                            Log.w(tag, "Failed to notify about chunk completion: ${periodicFile.uri}", e)
+                        }
+                        */
+
                     } else {
                         Log.w(tag, "Input or output stream is null. inputStream: $inputStream, outputStream: $outputStream")
                     }
